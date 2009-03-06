@@ -124,8 +124,8 @@ mlistForPath path =
 
 main :: IO ()
 main = do
-    let blah = mlistForPath "blah"
-        bleh = mlistForPath "bleh"
+    let blah = mlistForPath "test/blah"
+        bleh = mlistForPath "test/bleh"
     forMList_ (liftA2 (++) blah bleh) $ \line -> do
       print line
     return ()
