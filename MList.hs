@@ -4,6 +4,8 @@ module Main where
 
 import System.IO(FilePath, Handle, hGetLine, openFile, IOMode(ReadMode), hIsEOF)
 import Control.Applicative(Applicative(..), liftA2)
+import Control.Monad(liftM2)
+import Data.Monoid(Monoid(..))
 
 data Monad m => MListItem m a = MNil | MCons a (MList m a)
 newtype Monad m => MList m a = MList { unMList :: m (MListItem m a) }
@@ -52,10 +54,7 @@ mapMList f (MList acx) = do
   cx <- acx
   case cx of
     MNil -> return []
-    MCons x acxRest -> do
-      result <- f x
-      results <- mapMList f acxRest
-      return (result : results)
+    MCons x acxRest -> liftM2 (:) (f x) (mapMList f acxRest)
 
 forMList :: Monad m => MList m a -> (a -> m b) -> m [b]
 forMList = flip mapMList
@@ -68,9 +67,7 @@ mapMList_ f (MList acx) = do
   cx <- acx
   case cx of
     MNil -> return ()
-    MCons x acxRest -> do
-      f x
-      mapMList_ f acxRest
+    MCons x acxRest -> f x >> mapMList_ f acxRest
 
 forMList_ :: Monad m => MList m a -> (a -> m ()) -> m ()
 forMList_ = flip mapMList_
@@ -110,17 +107,27 @@ instance Monad m => Monad (MList m) where
     return = pure
     xs >>= f = concatMList $ fmap f xs
 
+instance Monad m => Monoid (MList m a) where
+    mempty = empty
+    mappend = append
+
 numbers :: Monad m => MList m Integer
 numbers = fromList [0..]
 
 enumerate :: Monad m => MList m a -> MList m (Integer, a)
 enumerate = zipMList (,) numbers
 
+mlistAction :: Monad m => m (MList m a) -> MList m a
+mlistAction act =
+    MList $ do
+      ml <- act
+      unMList ml
+
 mlistForPath :: FilePath -> MList IO String
 mlistForPath path =
-    MList $ do
-      handle <- openFile path ReadMode
-      unMList . hGetLines $ handle
+    let linesListOfPath = fmap hGetLines $ openFile path ReadMode
+    in mlistAction linesListOfPath
+      
 
 main :: IO ()
 main = do
