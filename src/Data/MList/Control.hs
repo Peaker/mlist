@@ -1,6 +1,6 @@
 {-# OPTIONS -O2 -Wall #-}
 
-module Data.MList.Control(while) where
+module Data.MList.Control(while,forever) where
 
 import Data.MList(MList(..),MListItem(MCons,MNil))
 import Control.Monad(liftM)
@@ -12,3 +12,6 @@ while cond act = result
                      if p
                        then liftM (`MCons` result) act
                        else return MNil
+
+forever :: Monad m => m a -> MList m a
+forever = while (return True)

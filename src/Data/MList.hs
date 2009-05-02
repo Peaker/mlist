@@ -18,6 +18,9 @@
 --       foldl f z [] = z
 --       foldl f z (x:xs) = foldl f (f z x) xs
 
+-- cache :: Monad m => MList m a -> MList m a
+-- that will only execute each item's action once.
+
 module Data.MList(MList(..)
                  ,MListItem(..)
                  ,empty
@@ -25,6 +28,12 @@ module Data.MList(MList(..)
                  ,singleton
                  ,fromList
                  ,zipWith
+                 ,take
+                 ,repeat
+                 ,replicate
+                 ,mrepeat
+                 ,mreplicate
+                 ,cycle
 
                  ,mfoldr
                  ,condense
@@ -38,14 +47,12 @@ module Data.MList(MList(..)
                  ,toList
                  ,append
                  ,concat
-                 ,mmerge
-                 ,numbers
-                 ,enumerate) where
+                 ,mmerge) where
 
-import Prelude hiding (zipWith, concat)
+import Prelude hiding (zipWith,concat,take,replicate,repeat,cycle)
 
-import Control.Applicative(Applicative(..))
-import Control.Monad(liftM,liftM2)
+-- import Control.Applicative(Applicative(..))
+import Control.Monad(liftM)
 import Data.Monoid(Monoid(..))
 
 data Monad m => MListItem m a = MNil | MCons a (MList m a)
@@ -65,6 +72,16 @@ singleton x = cons x empty
 
 fromList :: Monad m => [a] -> MList m a
 fromList = foldr cons empty
+
+-- strict foldr -- executes the entire list in any case!
+sfoldr :: Monad m => (a -> b -> b) -> b -> MList m a -> m b
+sfoldr consFunc nilFunc = mfoldr liftConsFunc liftNilFunc
+    where
+      liftConsFunc x act = liftM (x `consFunc`) act
+      liftNilFunc = return nilFunc
+-- strict
+toList :: Monad m => MList m a -> m [a]
+toList = sfoldr (:) []
 
 zipWith :: Monad m => (a -> b -> c) -> MList m a -> MList m b -> MList m c
 zipWith f (MList acx) (MList acy) =
@@ -91,23 +108,53 @@ mfoldr consFunc nilFunc (MList acx) = do
     MNil -> nilFunc
     MCons x xs -> consFunc x $ mfoldr consFunc nilFunc xs
 
-append :: Monad m => MList m a -> MList m a -> MList m a
-xs `append` ys = mmerge $ mfoldr consFunc nilFunc xs
+mfoldr' :: Monad m => (a -> MList m b -> MList m b) -> MList m b -> MList m a -> MList m b
+mfoldr' consFunc nilFunc = mmerge . mfoldr liftConsFunc liftNilFunc
     where
-      nilFunc = return ys
-      consFunc x rest = return . cons x . mmerge $ rest
+      liftNilFunc = return nilFunc
+      liftConsFunc x rest = return . consFunc x . mmerge $ rest
+
+append :: Monad m => MList m a -> MList m a -> MList m a
+xs `append` ys = mfoldr' cons ys xs
+
+concat :: Monad m => MList m (MList m a) -> MList m a
+concat = mfoldr' append empty
 
 condense :: Monad m => MList m (m a) -> MList m a
-condense = mmerge . mfoldr (liftM2 cons) (return empty)
-
--- strict foldr -- executes the entire list in any case!
-sfoldr :: Monad m => (a -> b -> b) -> b -> MList m a -> m b
-sfoldr consFunc nilFunc = mfoldr liftConsFunc liftNilFunc
+condense = mfoldr' consFunc empty
     where
-      liftConsFunc x act = liftM (x `consFunc`) act
-      liftNilFunc = return nilFunc
+      consFunc x xs = mmerge . liftM (`cons` xs) $ x
+
+take :: (Integral i, Monad m) => i -> MList m a -> MList m a
+take i (MList acx)
+    | i <= 0    = empty
+    | otherwise = MList $ do
+                    cx <- acx
+                    case cx of
+                      MNil -> return MNil
+                      MCons x rest -> return . MCons x . take (i-1) $ rest
+
+repeat :: Monad m => a -> MList m a
+repeat x = xs
+    where xs = cons x xs
+
+replicate :: (Monad m, Integral i) => i -> a -> MList m a
+replicate n = take n . repeat
+
+mrepeat :: Monad m => m a -> MList m a
+mrepeat ax = xs
+    where xs = MList $ liftM (`MCons` xs) ax
+
+mreplicate :: (Monad m, Integral i) => i -> m a -> MList m a
+mreplicate n = take n . mrepeat
+
+cycle :: Monad m => MList m a -> MList m a
+cycle xs = cxs
+    where cxs = xs `append` cxs
 
 -- msequence :: Monad m => MList m (m a) -> m [a]
+-- msequence = ...
+
 -- mSequence_ :: Monad m => MList m (m a) -> m ()
 -- mmapM :: Monad m => (a -> m b) -> MList m a -> m [b]
 -- mforM :: Monad m => MList m a -> (a -> m b) -> m [b]
@@ -115,31 +162,18 @@ sfoldr consFunc nilFunc = mfoldr liftConsFunc liftNilFunc
 -- mforM_ :: Monad m => MList m a -> (a -> m b) -> m ()
 
 
--- strict
-toList :: Monad m => MList m a -> m [a]
-toList = sfoldr (:) []
-      
+    
 instance Monad m => Monoid (MList m a) where
     mempty = empty
     mappend = append
 
-concat :: Monad m => MList m (MList m a) -> MList m a
--- TODO: sfoldr is strict! use a lazy implementation
-concat = mmerge . sfoldr mappend mempty
-
-numbers :: Monad m => MList m Integer
-numbers = fromList [0..]
-
-enumerate :: Monad m => MList m a -> MList m (Integer, a)
-enumerate = zipWith (,) numbers
-
 instance Monad m => Functor (MList m) where
-    fmap f = mmerge . sfoldr (cons . f) empty
+    fmap f = mfoldr' (cons . f) empty
 
-instance Monad m => Applicative (MList m) where
-    pure = singleton
-    (<*>) = liftM2 id
+-- instance Monad m => Applicative (MList m) where
+--     pure = return
+--     (<*>) = liftM2 id
 
-instance Monad m => Monad (MList m) where
-    return = pure
-    xs >>= f = concat $ fmap f xs
+-- instance Monad m => Monad (MList m) where
+--     return = singleton
+--     xs >>= f = concat $ fmap f xs
