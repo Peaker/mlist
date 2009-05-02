@@ -1,5 +1,23 @@
 {-# OPTIONS -O2 -Wall #-}
 
+-- TODO:
+-- 1. For MList is to be "lazy" two things must hold:
+--
+--    A. The actions of the MList have to be interlaced with the
+--       actions of the sequence.  This means that the sequence must
+--       be of a single monad.
+--
+--    B. Ability to "break" a loop:
+--       mwhile :: MList m (m (Bool, a)) -> m ([a], MList m (m (Bool, a)))   OR:
+--       mfoldr :: (a -> m b -> m b) -> m b -> MList m a -> m b
+--
+--       foldl is also interesting:
+--       mfoldl :: (m b -> a -> m b) -> m b -> MList m a -> m b
+--       mfoldl f z xs = do { f z
+--       foldl ::  (b -> a -> b) -> b -> [a] -> b
+--       foldl f z [] = z
+--       foldl f z (x:xs) = foldl f (f z x) xs
+
 module Data.MList(MList(..)
                  ,MListItem(..)
                  ,empty
@@ -7,21 +25,18 @@ module Data.MList(MList(..)
                  ,singleton
                  ,fromList
                  ,zipWith
-                 ,mlistFold
-                 ,sfoldr
-                 ,mnSequence
-                 ,mnSequence_
-                 ,mnmapM
-                 ,mnmapM_
-                 ,mnforM
-                 ,mnforM_
-                 ,mSequence
-                 ,mSequence_
-                 ,mmapM
-                 ,mmapM_
-                 ,mforM
-                 ,mforM_
-                 ,extract
+
+                 ,mfoldr
+                 ,condense
+                 -- ,msequence
+                 -- ,msequence_
+                 -- ,mmapM
+                 -- ,mmapM_
+                 -- ,mforM
+                 -- ,mforM_
+
+                 ,toList
+                 ,append
                  ,concat
                  ,mmerge
                  ,numbers
@@ -30,7 +45,7 @@ module Data.MList(MList(..)
 import Prelude hiding (zipWith, concat)
 
 import Control.Applicative(Applicative(..))
-import Control.Monad(liftM2,join)
+import Control.Monad(liftM,liftM2)
 import Data.Monoid(Monoid(..))
 
 data Monad m => MListItem m a = MNil | MCons a (MList m a)
@@ -57,75 +72,60 @@ zipWith f (MList acx) (MList acy) =
       cx <- acx
       case cx of
         MNil -> return MNil
-        MCons x acxRest -> do
+        MCons x xs -> do
           cy <- acy
           return $
             case cy of
               MNil -> MNil
               MCons y acyRest ->
-                  MCons (f x y) (zipWith f acxRest acyRest)
+                  MCons (f x y) (zipWith f xs acyRest)
 
-mlistFold :: Monad m => (a -> b -> m b) -> m b -> MList m a -> m b
-mlistFold consFunc nilFunc (MList acx) = do
+-- bind the monadic effect before the first item in the list.
+mmerge :: Monad m => m (MList m a) -> MList m a
+mmerge act = MList $ act >>= unMList
+
+mfoldr :: Monad m => (a -> m b -> m b) -> m b -> MList m a -> m b
+mfoldr consFunc nilFunc (MList acx) = do
   cx <- acx
   case cx of
     MNil -> nilFunc
-    MCons x acxRest -> mlistFold consFunc nilFunc acxRest >>=
-                       consFunc x
+    MCons x xs -> consFunc x $ mfoldr consFunc nilFunc xs
 
+append :: Monad m => MList m a -> MList m a -> MList m a
+xs `append` ys = mmerge $ mfoldr consFunc nilFunc xs
+    where
+      nilFunc = return ys
+      consFunc x rest = return . cons x . mmerge $ rest
+
+condense :: Monad m => MList m (m a) -> MList m a
+condense = mmerge . mfoldr (liftM2 cons) (return empty)
+
+-- strict foldr -- executes the entire list in any case!
 sfoldr :: Monad m => (a -> b -> b) -> b -> MList m a -> m b
-sfoldr consFunc nilFunc = mlistFold ((return .) . consFunc) (return nilFunc)
+sfoldr consFunc nilFunc = mfoldr liftConsFunc liftNilFunc
+    where
+      liftConsFunc x act = liftM (x `consFunc`) act
+      liftNilFunc = return nilFunc
 
-mnSequence :: (Monad m, Monad n) => MList m (n a) -> m (n [a])
-mnSequence = sfoldr (liftM2 (:)) (return [])
-
-mnSequence_ :: (Monad m, Monad n) => MList m (n a) -> m (n ())
-mnSequence_ = sfoldr (>>) (return ())
-
-mnmapM :: (Monad m, Monad n) => (a -> n b) -> MList m a -> m (n [b])
-mnmapM f = mnSequence . fmap f
-
-mnforM :: (Monad m, Monad n) => MList m a -> (a -> n b) -> m (n [b])
-mnforM = flip mnmapM
-
-mnmapM_ :: (Monad m, Monad n) => (a -> n b) -> MList m a -> m (n ())
-mnmapM_ f = mnSequence_ . fmap f
-
-mnforM_ :: (Monad m, Monad n) => MList m a -> (a -> n b) -> m (n ())
-mnforM_ = flip mnmapM_
+-- msequence :: Monad m => MList m (m a) -> m [a]
+-- mSequence_ :: Monad m => MList m (m a) -> m ()
+-- mmapM :: Monad m => (a -> m b) -> MList m a -> m [b]
+-- mforM :: Monad m => MList m a -> (a -> m b) -> m [b]
+-- mmapM_ :: Monad m => (a -> m b) -> MList m a -> m ()
+-- mforM_ :: Monad m => MList m a -> (a -> m b) -> m ()
 
 
-mSequence :: Monad m => MList m (m a) -> m [a]
-mSequence = join . mnSequence
-
-mSequence_ :: Monad m => MList m (m a) -> m ()
-mSequence_ = join . mnSequence_
-
-mmapM :: Monad m => (a -> m b) -> MList m a -> m [b]
-mmapM = (join.) . mnmapM
-
-mforM :: Monad m => MList m a -> (a -> m b) -> m [b]
-mforM = (join.) . mnforM
-
-mmapM_ :: Monad m => (a -> m b) -> MList m a -> m ()
-mmapM_ = (join.) . mnmapM_
-
-mforM_ :: Monad m => MList m a -> (a -> m b) -> m ()
-mforM_ = (join.) . mnforM_
-
-
-extract :: Monad m => MList m a -> m [a]
-extract = sfoldr (:) []
-
+-- strict
+toList :: Monad m => MList m a -> m [a]
+toList = sfoldr (:) []
+      
 instance Monad m => Monoid (MList m a) where
     mempty = empty
-    mappend xs ys = mmerge $ sfoldr cons ys xs
+    mappend = append
 
 concat :: Monad m => MList m (MList m a) -> MList m a
+-- TODO: sfoldr is strict! use a lazy implementation
 concat = mmerge . sfoldr mappend mempty
-
-mmerge :: Monad m => m (MList m a) -> MList m a
-mmerge act = MList $ act >>= unMList
 
 numbers :: Monad m => MList m Integer
 numbers = fromList [0..]
