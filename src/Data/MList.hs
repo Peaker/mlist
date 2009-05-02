@@ -40,22 +40,22 @@ module Data.MList(MList(..)
                  ,cycle
 
                  ,mfoldr
+                 ,mfoldr'
+                 ,map
                  ,condense
                  ,msequence
                  ,msequence_
-                 -- ,mmapM
-                 -- ,mmapM_
-                 -- ,mforM
-                 -- ,mforM_
+                 ,mmap
+                 ,mfor
 
                  ,append
                  ,concat
                  ,mmerge) where
 
-import Prelude hiding (zipWith,concat,take,replicate,repeat,cycle)
+import Prelude hiding (zipWith,concat,take,replicate,repeat,cycle,map)
 
--- import Control.Applicative(Applicative(..))
-import Control.Monad(liftM)
+import Control.Applicative(Applicative(..))
+import Control.Monad(liftM,liftM2)
 import Data.Monoid(Monoid(..))
 
 data Monad m => MListItem m a = MNil | MCons a (MList m a)
@@ -119,6 +119,9 @@ mfoldr' consFunc nilFunc = mmerge . mfoldr liftConsFunc liftNilFunc
       liftNilFunc = return nilFunc
       liftConsFunc x rest = return . consFunc x . mmerge $ rest
 
+map :: Monad m => (a -> b) -> MList m a -> MList m b
+map f = mfoldr' (cons . f) empty
+
 append :: Monad m => MList m a -> MList m a -> MList m a
 xs `append` ys = mfoldr' cons ys xs
 
@@ -163,24 +166,23 @@ msequence = toList . condense
 msequence_ :: Monad m => MList m (m a) -> m ()
 msequence_ = execute . condense
 
--- mmapM :: Monad m => (a -> m b) -> MList m a -> m [b]
--- mforM :: Monad m => MList m a -> (a -> m b) -> m [b]
--- mmapM_ :: Monad m => (a -> m b) -> MList m a -> m ()
--- mforM_ :: Monad m => MList m a -> (a -> m b) -> m ()
+mmap :: Monad m => (a -> m b) -> MList m a -> MList m b
+mmap f = condense . map f
 
+mfor :: Monad m => MList m a -> (a -> m b) -> MList m b
+mfor = flip mmap
 
-    
 instance Monad m => Monoid (MList m a) where
     mempty = empty
     mappend = append
 
 instance Monad m => Functor (MList m) where
-    fmap f = mfoldr' (cons . f) empty
+    fmap = map
 
--- instance Monad m => Applicative (MList m) where
---     pure = return
---     (<*>) = liftM2 id
+instance Monad m => Applicative (MList m) where
+    pure = return
+    (<*>) = liftM2 id
 
--- instance Monad m => Monad (MList m) where
---     return = singleton
---     xs >>= f = concat $ fmap f xs
+instance Monad m => Monad (MList m) where
+    return = singleton
+    xs >>= f = concat . map f $ xs

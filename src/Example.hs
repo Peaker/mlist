@@ -3,16 +3,18 @@
 import qualified Data.MList as MList
 import qualified Data.MList.Control as MControl
 import Data.MList(MList)
--- import Data.Monoid(Monoid(..))
--- import System.IO(FilePath,openFile,IOMode(ReadMode))
+import Data.MList.IO(hGetLines)
+import Data.Monoid(Monoid(..))
+import System.IO(FilePath,openFile,IOMode(ReadMode))
 
--- import Control.Applicative(liftA2)
--- import Control.Arrow(first)
+import Control.Applicative(liftA2)
+import Control.Monad(liftM2)
+import Control.Arrow(first)
 
--- mlistForPath :: FilePath -> MList IO String
--- mlistForPath path = MList.mmerge linesListOfPath
---     where handle = openFile path ReadMode
---           linesListOfPath = fmap hGetLines handle
+mlistForPath :: FilePath -> MList IO String
+mlistForPath path = MList.mmerge linesListOfPath
+    where handle = openFile path ReadMode
+          linesListOfPath = fmap hGetLines handle
 
 enumerate :: Monad m => MList m a -> MList m (Integer, a)
 enumerate = MList.zipWith (,) (MList.fromList [0..])
@@ -38,28 +40,17 @@ main = do
   print x3
   print =<< MList.toList result3
 
-  -- putStrLn "Testing concat..."
+  -- putStrLn "Testing monad instance..."
   -- let result2 = MList.concat $ fmap print ls
   -- MList.MCons line2 _ <- MList.unMList result2
   -- print line2
 
+  putStrLn "Testing files and instances ..."
+  let enumStr = fmap (uncurry (++) . first ((" " ++) . (++ " ") . show)) . enumerate
+      blah = enumStr . mlistForPath $ "test/blah"
+      bleh = enumStr . fmap show $ finite
+  putStrLn "Applicative ..."
+  MList.execute . MList.mmap print $ liftA2 (++) blah bleh
+  putStrLn "Monad and Monoid ..."
+  MList.execute . MList.mmap print $ liftM2 mappend blah bleh
   return ()
-  -- xs1 <- MList.mSequence . MList.fromList $ [return "a", return "b"]
-  -- print xs1
-
-  -- xs2 <- MList.extract . enumerate . fmap (join (++)) . MList.fromList $ ["a","b","c"]
-  -- print xs2
-
-  -- let l1 = MList.fromList "abc"
-  --     l2 = MList.fromList "def"
-  -- xs3 <- MList.extract $ l1 `mappend` l2
-  -- print xs3
-
-  -- xs4 <- MList.toList . mlistForPath $ "test/blah"
-  -- print xs4
-
-  -- let enumStr = fmap (uncurry (++) . first ((" " ++) . (++ " ") . show)) . enumerate
-  --     blah = enumStr . mlistForPath $ "test/blah"
-  --     bleh = enumStr . mlistForPath $ "test/bleh"
-  -- MList.mforM_ (liftA2 (++) blah bleh) print
-  -- return ()
