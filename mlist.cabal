@@ -1,5 +1,5 @@
 Name:                mlist
-Version:             0.0.1
+Version:             0.0.2
 Cabal-Version:       >= 1.2
 Synopsis:            Monadic List alternative to lazy I/O
 Category:            Data
@@ -23,7 +23,8 @@ Library
   Build-Depends:       base, haskell98
   Exposed-Modules:     Data.MList,
                        Data.MList.IO,
-                       Data.MList.Control
+                       Data.MList.Control,
+                       Data.MList.Memo
   -- Other-Modules:
   ghc-options:         -Wall
 --  ghc-prof-options:    -prof -auto-all 
