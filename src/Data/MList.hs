@@ -1,26 +1,5 @@
 {-# OPTIONS -O2 -Wall #-}
 
--- TODO:
--- 1. For MList is to be "lazy" two things must hold:
---
---    A. The actions of the MList have to be interlaced with the
---       actions of the sequence.  This means that the sequence must
---       be of a single monad.
---
---    B. Ability to "break" a loop:
---       mwhile :: MList m (m (Bool, a)) -> m ([a], MList m (m (Bool, a)))   OR:
---       mfoldr :: (a -> m b -> m b) -> m b -> MList m a -> m b
---
---       foldl is also interesting:
---       mfoldl :: (m b -> a -> m b) -> m b -> MList m a -> m b
---       mfoldl f z xs = do { f z
---       foldl ::  (b -> a -> b) -> b -> [a] -> b
---       foldl f z [] = z
---       foldl f z (x:xs) = foldl f (f z x) xs
-
--- cache :: Monad m => MList m a -> MList m a
--- that will only execute each item's action once.
-
 module Data.MList(MList(..)
                  ,MListItem(..)
                  ,empty

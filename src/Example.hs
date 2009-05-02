@@ -2,6 +2,7 @@
 
 import qualified Data.MList as MList
 import qualified Data.MList.Control as MControl
+import qualified Data.MList.Memo as MMemo
 import Data.MList(MList)
 import Data.MList.IO(hGetLines)
 import Data.Monoid(Monoid(..))
@@ -10,6 +11,7 @@ import System.IO(FilePath,openFile,IOMode(ReadMode))
 import Control.Applicative(liftA2)
 import Control.Monad(liftM2)
 import Control.Arrow(first)
+import Control.Monad(forM_)
 
 mlistForPath :: FilePath -> MList IO String
 mlistForPath path = MList.mmerge linesListOfPath
@@ -28,6 +30,13 @@ main = do
   let result1 = xs `MList.append` xs
   MList.MCons x1 _ <- MList.unMList result1
   print x1
+
+  putStrLn "Testing memo..."
+  memoresult1 <- MMemo.memo result1
+  forM_ ['a'..'d'] . const $ do
+      putStrLn "Getting first element of memoized list"
+      MList.MCons mx1 _ <- MList.unMList memoresult1
+      print mx1
 
   putStrLn "Testing condense ..."
   let result2 = MList.condense $ fmap print xs
