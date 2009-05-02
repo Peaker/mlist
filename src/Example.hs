@@ -49,11 +49,6 @@ main = do
   print x3
   print =<< MList.toList result3
 
-  -- putStrLn "Testing monad instance..."
-  -- let result2 = MList.concat $ fmap print ls
-  -- MList.MCons line2 _ <- MList.unMList result2
-  -- print line2
-
   putStrLn "Testing files and instances ..."
   let enumStr = fmap (uncurry (++) . first ((" " ++) . (++ " ") . show)) . enumerate
       blah = enumStr . mlistForPath $ "test/blah"
