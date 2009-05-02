@@ -26,7 +26,11 @@ module Data.MList(MList(..)
                  ,empty
                  ,cons
                  ,singleton
+
                  ,fromList
+                 ,toList
+                 ,execute
+
                  ,zipWith
                  ,take
                  ,repeat
@@ -37,14 +41,13 @@ module Data.MList(MList(..)
 
                  ,mfoldr
                  ,condense
-                 -- ,msequence
-                 -- ,msequence_
+                 ,msequence
+                 ,msequence_
                  -- ,mmapM
                  -- ,mmapM_
                  -- ,mforM
                  -- ,mforM_
 
-                 ,toList
                  ,append
                  ,concat
                  ,mmerge) where
@@ -82,6 +85,8 @@ sfoldr consFunc nilFunc = mfoldr liftConsFunc liftNilFunc
 -- strict
 toList :: Monad m => MList m a -> m [a]
 toList = sfoldr (:) []
+execute :: Monad m => MList m a -> m ()
+execute = sfoldr ((const . const) ()) ()
 
 zipWith :: Monad m => (a -> b -> c) -> MList m a -> MList m b -> MList m c
 zipWith f (MList acx) (MList acy) =
@@ -152,10 +157,12 @@ cycle :: Monad m => MList m a -> MList m a
 cycle xs = cxs
     where cxs = xs `append` cxs
 
--- msequence :: Monad m => MList m (m a) -> m [a]
--- msequence = ...
+msequence :: Monad m => MList m (m a) -> m [a]
+msequence = toList . condense
 
--- mSequence_ :: Monad m => MList m (m a) -> m ()
+msequence_ :: Monad m => MList m (m a) -> m ()
+msequence_ = execute . condense
+
 -- mmapM :: Monad m => (a -> m b) -> MList m a -> m [b]
 -- mforM :: Monad m => MList m a -> (a -> m b) -> m [b]
 -- mmapM_ :: Monad m => (a -> m b) -> MList m a -> m ()
